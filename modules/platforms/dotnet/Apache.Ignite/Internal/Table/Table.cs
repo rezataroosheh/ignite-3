@@ -279,6 +279,37 @@ namespace Apache.Ignite.Internal.Table
         }
 
         /// <summary>
+        /// Gets the preferred node by partition.
+        /// </summary>
+        /// <param name="partition">Partition.</param>
+        /// <returns>Preferred node.</returns>
+        internal async ValueTask<PreferredNode> GetPreferredNode(IPartition partition)
+        {
+            IgniteArgumentCheck.NotNull(partition);
+
+            if (partition is not HashPartition hashPartition)
+            {
+                throw new ArgumentException("Unsupported partition type: " + partition.GetType());
+            }
+
+            if (partition.Id < 0)
+            {
+                throw new ArgumentException("Partition id can't be negative: " + partition);
+            }
+
+            var assignment = await GetPartitionAssignmentAsync().ConfigureAwait(false);
+
+            if (partition.Id >= assignment.Length)
+            {
+                throw new ArgumentException($"Partition id can't be greater than {assignment.Length - 1}: {partition}");
+            }
+
+            var nodeConsistentId = assignment[partition.Id];
+
+            return PreferredNode.FromName(nodeConsistentId);
+        }
+
+        /// <summary>
         /// Gets the partition assignment.
         /// </summary>
         /// <returns>Partition assignment.</returns>

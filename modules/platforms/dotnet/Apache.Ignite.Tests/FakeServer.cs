@@ -349,8 +349,9 @@ namespace Apache.Ignite.Tests
 
                     case ClientOp.ComputeExecute:
                     case ClientOp.ComputeExecuteColocated:
+                    case ClientOp.ComputeExecutePartitioned:
                     {
-                        using var pooledArrayBuffer = ComputeExecute(reader, colocated: opCode == ClientOp.ComputeExecuteColocated);
+                        using var pooledArrayBuffer = ComputeExecute(reader, opCode);
 
                         using var resWriter = new PooledArrayBuffer();
 
@@ -772,13 +773,19 @@ namespace Apache.Ignite.Tests
             Send(handler, requestId, arrayBufferWriter);
         }
 
-        private PooledArrayBuffer ComputeExecute(MsgPackReader reader, bool colocated = false)
+        private PooledArrayBuffer ComputeExecute(MsgPackReader reader, ClientOp optCode)
         {
             // Colocated: table id, schema version, key.
+            // Partitioned: table id, partition id.
             // Else: node names.
-            if (colocated)
+            if (optCode == ClientOp.ComputeExecuteColocated)
             {
                 reader.Skip(4);
+            }
+            else if (optCode == ClientOp.ComputeExecutePartitioned)
+            {
+                reader.ReadInt32();
+                reader.ReadInt64();
             }
             else
             {

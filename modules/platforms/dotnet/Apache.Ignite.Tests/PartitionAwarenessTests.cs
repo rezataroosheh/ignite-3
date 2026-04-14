@@ -36,6 +36,12 @@ using NUnit.Framework;
 /// </summary>
 public class PartitionAwarenessTests
 {
+    private static readonly object[] PartitionNodeCases =
+    {
+        new object[] { 0, 1 },
+        new object[] { 1, 2 }
+    };
+
     private static readonly object[] KeyNodeCases =
     {
         new object[] { 0, 1 },
@@ -417,6 +423,54 @@ public class PartitionAwarenessTests
     }
 
     [Test]
+    [TestCaseSource(nameof(PartitionNodeCases))]
+    public async Task TestExecutePartitionedRoutesRequestToPrimaryNode(int partitionId, int node)
+    {
+        using var client = await GetClient();
+        var expectedNode = node == 1 ? _server1 : _server2;
+
+        var jobTarget = JobTarget.Partition(FakeServer.ExistingTableName, new Internal.Table.HashPartition(partitionId));
+        var jobDescriptor = new JobDescriptor<object?, object?>("job");
+        var jobExecution = await client.Compute.SubmitAsync(jobTarget, jobDescriptor, null);
+
+        await AssertOpOnNode(
+            _ => client.Compute.SubmitAsync(jobTarget, jobDescriptor, null),
+            ClientOp.ComputeExecutePartitioned,
+            expectedNode);
+    }
+
+    [Test]
+    public async Task TestPartitionJobExecutesOnPrimaryReplicaNode()
+    {
+        using var client = await GetClient();
+        var table = await client.Tables.GetTableAsync(FakeServer.ExistingTableName);
+        var partitions = await table!.PartitionDistribution.GetPartitionsAsync();
+
+        foreach (var partition in partitions)
+        {
+            // Get the expected primary replica for this partition
+            var expectedNode = await table.PartitionDistribution.GetPrimaryReplicaAsync(partition);
+
+            // Submit a job targeting this specific partition
+            var jobTarget = JobTarget.Partition(table.Name, partition);
+            var jobDescriptor = new JobDescriptor<object?, object?>("job");
+
+            // Use a job class that returns the name of the node it ran on
+            var execution = await client.Compute.SubmitAsync(
+                jobTarget,
+                jobDescriptor,
+                null);
+
+            var actualNodeName = await execution.GetResultAsync();
+
+            Assert.AreEqual(
+                expectedNode.Name,
+                actualNodeName,
+                $"Job for partition {partition.Id} should have executed on {expectedNode.Name}");
+        }
+    }
+
+    [Test]
     public async Task TestOldAssignmentIsIgnored()
     {
         using var client = await GetClient();
@@ -453,7 +507,10 @@ public class PartitionAwarenessTests
     {
         await AssertOpOnNodeInner(action, op, node, node2, allowExtraOps, withTx: false);
 
-        if (op != ClientOp.StreamerBatchSend && op != ClientOp.ComputeExecuteColocated && op != ClientOp.StreamerWithReceiverBatchSend)
+        if (op != ClientOp.StreamerBatchSend
+            && op != ClientOp.ComputeExecuteColocated
+            && op != ClientOp.ComputeExecutePartitioned
+            && op != ClientOp.StreamerWithReceiverBatchSend)
         {
             await AssertOpOnNodeInner(action, op, node, node2, allowExtraOps, withTx: true);
         }
