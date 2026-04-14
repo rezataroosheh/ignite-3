@@ -18,6 +18,7 @@
 namespace Apache.Ignite.Compute;
 
 using System.Collections.Generic;
+using Apache.Ignite.Table;
 using Internal.Common;
 using Network;
 
@@ -51,8 +52,37 @@ public static class BroadcastJobTarget
     }
 
     /// <summary>
+    /// Creates a broadcast job target for all partitions of a table.
+    /// </summary>
+    /// <param name="tableName">Table to run the job on.</param>
+    /// <returns>Job target.</returns>
+    public static IBroadcastJobTarget<QualifiedName> Table(QualifiedName tableName)
+    {
+        IgniteArgumentCheck.NotNull(tableName);
+
+        return new TableTarget(tableName);
+    }
+
+    /// <summary>
+    /// Creates a broadcast job target for all partitions of a table.
+    /// </summary>
+    /// <param name="tableName">Table name to run the job on.</param>
+    /// <returns>Job target.</returns>
+    public static IBroadcastJobTarget<QualifiedName> Nodes(string tableName)
+    {
+        IgniteArgumentCheck.NotNull(tableName);
+
+        return new TableTarget(QualifiedName.Parse(tableName));
+    }
+
+    /// <summary>
     /// All nodes broadcast job target.
     /// </summary>
     /// <param name="Data">Nodes.</param>
     internal record AllNodesTarget(IEnumerable<IClusterNode> Data) : IBroadcastJobTarget<IEnumerable<IClusterNode>>;
+    /// <summary>
+    /// All partitions of a table broadcast job target.
+    /// </summary>
+    /// <param name="Data">Table.</param>
+    internal record TableTarget(QualifiedName Data) : IBroadcastJobTarget<QualifiedName>;
 }

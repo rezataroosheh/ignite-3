@@ -102,6 +102,9 @@ namespace Apache.Ignite.Internal.Compute
                 BroadcastJobTarget.AllNodesTarget allNodes => await SubmitBroadcastAsyncInternal(allNodes.Data)
                     .ConfigureAwait(false),
 
+                BroadcastJobTarget.TableTarget table => await SubmitBroadcastAsyncTable(table.Data)
+                    .ConfigureAwait(false),
+
                 _ => throw new ArgumentException("Unsupported broadcast job target: " + target)
             };
 
@@ -112,6 +115,22 @@ namespace Apache.Ignite.Internal.Compute
                 foreach (var node in nodes)
                 {
                     IJobExecution<TResult> jobExec = await ExecuteOnNodes([node], jobDescriptor, arg, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    jobExecutions.Add(jobExec);
+                }
+
+                return new BroadcastExecution<TResult>(jobExecutions);
+            }
+
+            async Task<IBroadcastExecution<TResult>> SubmitBroadcastAsyncTable(QualifiedName tableName)
+            {
+                var jobExecutions = new List<IJobExecution<TResult>>();
+                var table = await GetTableAsync(tableName).ConfigureAwait(false);
+                var partitions = await table.PartitionDistribution.GetPartitionsAsync().ConfigureAwait(false);
+                foreach (var partition in partitions)
+                {
+                    IJobExecution<TResult> jobExec = await ExecuteOnPartition(table, partition, jobDescriptor, arg, cancellationToken)
                         .ConfigureAwait(false);
 
                     jobExecutions.Add(jobExec);
@@ -584,13 +603,12 @@ namespace Apache.Ignite.Internal.Compute
         }
 
         private async Task<IJobExecution<TResult>> ExecuteOnPartition<TArg, TResult>(
-            QualifiedName tableName,
+            Table table,
             IPartition partition,
             JobDescriptor<TArg, TResult> jobDescriptor,
             TArg arg,
             CancellationToken cancellationToken)
         {
-            var table = await GetTableAsync(tableName).ConfigureAwait(false);
             var preferredNode = await table.GetPreferredNode(partition).ConfigureAwait(false);
             using var writer = ProtoCommon.GetMessageWriter();
 
@@ -701,8 +719,9 @@ namespace Apache.Ignite.Internal.Compute
             IgniteArgumentCheck.NotNull(target);
             IgniteArgumentCheck.NotNull(jobDescriptor);
             IgniteArgumentCheck.NotNull(jobDescriptor.JobClassName);
+            var table = await GetTableAsync(target.TableName).ConfigureAwait(false);
 
-            return await ExecuteOnPartition(target.TableName, target.Data, jobDescriptor, arg, cancellationToken)
+            return await ExecuteOnPartition(table, target.Data, jobDescriptor, arg, cancellationToken)
                 .ConfigureAwait(false);
         }
 
