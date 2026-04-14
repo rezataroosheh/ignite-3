@@ -82,6 +82,7 @@ import org.apache.ignite.internal.raft.Peer;
 import org.apache.ignite.internal.raft.RaftGroupOptionsConfigurer;
 import org.apache.ignite.internal.raft.TestLozaFactory;
 import org.apache.ignite.internal.raft.client.TopologyAwareRaftGroupServiceFactory;
+import org.apache.ignite.internal.raft.configuration.LogStorageConfiguration;
 import org.apache.ignite.internal.raft.configuration.RaftConfiguration;
 import org.apache.ignite.internal.raft.service.LeaderWithTerm;
 import org.apache.ignite.internal.raft.service.TimeAwareRaftGroupService;
@@ -118,6 +119,9 @@ public class MultiActorPlacementDriverTest extends BasePlacementDriverTest {
 
     @InjectConfiguration
     private ReplicationConfiguration replicationConfiguration;
+
+    @InjectConfiguration
+    private static LogStorageConfiguration logStorageConfiguration;
 
     private List<String> placementDriverNodeNames;
 
@@ -277,7 +281,8 @@ public class MultiActorPlacementDriverTest extends BasePlacementDriverTest {
 
             LogStorageManager partitionsLogStorageManager = SharedLogStorageManagerUtils.create(
                     clusterService.staticLocalNode().name(),
-                    workingDir.raftLogPath()
+                    workingDir.raftLogPath(),
+                    logStorageConfiguration
             );
 
             var raftManager = TestLozaFactory.create(
@@ -297,7 +302,8 @@ public class MultiActorPlacementDriverTest extends BasePlacementDriverTest {
             ComponentWorkingDir metastorageWorkDir = new ComponentWorkingDir(workDir.resolve(nodeName + "_metastorage"));
 
             LogStorageManager msLogStorageManager =
-                    SharedLogStorageManagerUtils.create(clusterService.staticLocalNode().name(), metastorageWorkDir.raftLogPath());
+                    SharedLogStorageManagerUtils.create(clusterService.staticLocalNode().name(), metastorageWorkDir.raftLogPath(),
+                            logStorageConfiguration);
 
             RaftGroupOptionsConfigurer msRaftConfigurer =
                     RaftGroupOptionsConfigHelper.configureProperties(msLogStorageManager, metastorageWorkDir.metaPath());
