@@ -223,13 +223,11 @@ namespace Apache.Ignite.Tests.Compute
         [Test]
         public void TestUnknownTableSubmitBroadcastThrows()
         {
-            var unknownTable = "unknown_table";
+            var ex = Assert.ThrowsAsync<IgniteClientException>(
+                async () => await Client.Compute.SubmitBroadcastAsync(BroadcastJobTarget.Table("unknownTable"), EchoJob, "unused"));
 
-            var ex = Assert.ThrowsAsync<TableNotFoundException>(
-                async () => await Client.Compute.SubmitBroadcastAsync(BroadcastJobTarget.Table(unknownTable), EchoJob, "unused"));
-
-            StringAssert.StartsWith("Table does not exist or was dropped concurrently", ex.Message);
-            Assert.AreEqual(ErrorGroups.Table.TableNotFound, ex.Code);
+            Assert.AreEqual("Table 'PUBLIC.UNKNOWNTABLE' does not exist.", ex!.Message);
+            Assert.AreEqual(ErrorGroups.Client.TableIdNotFound, ex.Code);
         }
 
         [Test]
