@@ -287,26 +287,9 @@ namespace Apache.Ignite.Internal.Table
         {
             IgniteArgumentCheck.NotNull(partition);
 
-            if (partition is not HashPartition hashPartition)
-            {
-                throw new ArgumentException("Unsupported partition type: " + partition.GetType());
-            }
+            var node = await PartitionDistribution.GetPrimaryReplicaAsync(partition).ConfigureAwait(false);
 
-            if (partition.Id < 0)
-            {
-                throw new ArgumentException("Partition id can't be negative: " + partition);
-            }
-
-            var assignment = await GetPartitionAssignmentAsync().ConfigureAwait(false);
-
-            if (partition.Id >= assignment.Length)
-            {
-                throw new ArgumentException($"Partition id can't be greater than {assignment.Length - 1}: {partition}");
-            }
-
-            var nodeConsistentId = assignment[partition.Id];
-
-            return PreferredNode.FromName(nodeConsistentId);
+            return PreferredNode.FromName(node.Name);
         }
 
         /// <summary>
