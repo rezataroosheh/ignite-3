@@ -141,6 +141,36 @@ namespace Apache.Ignite.Tests.Compute
         }
 
         [Test]
+        public async Task TestBroadcastTable()
+        {
+            var table = await Client.Tables.GetTableAsync(TableName);
+            var partitions = await table!.PartitionDistribution.GetPartitionsAsync();
+            long[] partitionIds = partitions.Select(p => p.Id).Order().ToArray();
+
+            IBroadcastExecution<int> broadcastExecution = await Client.Compute.SubmitBroadcastAsync(
+                BroadcastJobTarget.Table(TableName),
+                PartitionJob,
+                1);
+
+            List<long> taskResults = [];
+            foreach (var x in broadcastExecution.JobExecutions)
+            {
+                taskResults.Add(await x.GetResultAsync());
+            }
+
+            Assert.AreEqual(partitionIds.Length, taskResults.Count);
+        }
+
+        [Test]
+        public async Task TestBroadcastTableOverloads()
+        {
+            var target1 = BroadcastJobTarget.Table(TableName);
+            var target2 = BroadcastJobTarget.Table(QualifiedName.Parse(TableName));
+            Assert.AreEqual(target1.Data.ObjectName, target2.Data.ObjectName);
+            Assert.AreEqual(target1.Data.ObjectName, target2.Data.ObjectName);
+        }
+
+        [Test]
         public async Task TestExecuteWithNullArgs()
         {
             var res = await Client.Compute.SubmitAsync(await GetNodeAsync(0), ConcatJob, null);
@@ -188,6 +218,18 @@ namespace Apache.Ignite.Tests.Compute
 
             StringAssert.Contains("None of the specified nodes are present in the cluster: [y]", ex!.Message);
             Assert.AreEqual(ErrorGroups.Compute.NodeNotFound, ex.Code);
+        }
+
+        [Test]
+        public void TestUnknownTableSubmitBroadcastThrows()
+        {
+            var unknownTable = "unknown_table";
+
+            var ex = Assert.ThrowsAsync<TableNotFoundException>(
+                async () => await Client.Compute.SubmitBroadcastAsync(BroadcastJobTarget.Table(unknownTable), EchoJob, "unused"));
+
+            StringAssert.StartsWith("Table does not exist or was dropped concurrently", ex.Message);
+            Assert.AreEqual(ErrorGroups.Table.TableNotFound, ex.Code);
         }
 
         [Test]
@@ -695,7 +737,7 @@ namespace Apache.Ignite.Tests.Compute
         }
 
         [Test]
-        public async Task TestCancelBroadcast()
+        public async Task TestCancelAllNodesTargetBroadcast()
         {
             const int sleepMs = 10_000;
             var beforeStart = GetCurrentInstant();
@@ -704,6 +746,35 @@ namespace Apache.Ignite.Tests.Compute
 
             IBroadcastExecution<string> jobExecution = await Client.Compute.SubmitBroadcastAsync(
                 BroadcastJobTarget.Nodes(await Client.GetClusterNodesAsync()),
+                SleepJob,
+                sleepMs,
+                cts.Token);
+
+            await cts.CancelAsync();
+
+            foreach (var jobExec in jobExecution.JobExecutions)
+            {
+                // SleepJob throws RuntimeException on interrupt, not CancellationException.
+                await AssertWaitJobStatus(jobExec, JobStatus.Failed, beforeStart);
+
+                var ex = Assert.ThrowsAsync<ComputeException>(async () => await jobExec.GetResultAsync());
+
+                Assert.AreEqual(
+                    "Job execution failed: java.lang.RuntimeException: java.lang.InterruptedException: sleep interrupted",
+                    ex.Message);
+            }
+        }
+
+        [Test]
+        public async Task TestCancelTableTargetBroadcast()
+        {
+            const int sleepMs = 10_000;
+            var beforeStart = GetCurrentInstant();
+
+            var cts = new CancellationTokenSource();
+
+            IBroadcastExecution<string> jobExecution = await Client.Compute.SubmitBroadcastAsync(
+                BroadcastJobTarget.Table(FakeServer.ExistingTableName),
                 SleepJob,
                 sleepMs,
                 cts.Token);
@@ -782,12 +853,28 @@ namespace Apache.Ignite.Tests.Compute
         }
 
         [Test]
-        public async Task TestBroadcastCancellationTokenRegistrationCleanup()
+        public async Task TestAllNodesTargetBroadcastCancellationTokenRegistrationCleanup()
         {
             var cts = new CancellationTokenSource();
 
             var exec = await Client.Compute.SubmitBroadcastAsync(
                 BroadcastJobTarget.Nodes(await Client.GetClusterNodesAsync()), NodeNameJob, "x", cts.Token);
+
+            foreach (var jobExec in exec.JobExecutions)
+            {
+                await jobExec.GetResultAsync();
+            }
+
+            Assert.IsFalse(TestUtils.HasCallbacks(cts));
+        }
+
+        [Test]
+        public async Task TestTableTargetBroadcastCancellationTokenRegistrationCleanup()
+        {
+            var cts = new CancellationTokenSource();
+
+            var exec = await Client.Compute.SubmitBroadcastAsync(
+                BroadcastJobTarget.Table(TableName), PartitionJob, 1, cts.Token);
 
             foreach (var jobExec in exec.JobExecutions)
             {

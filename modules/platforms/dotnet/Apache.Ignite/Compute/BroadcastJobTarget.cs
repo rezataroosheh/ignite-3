@@ -68,7 +68,7 @@ public static class BroadcastJobTarget
     /// </summary>
     /// <param name="tableName">Table name to run the job on.</param>
     /// <returns>Job target.</returns>
-    public static IBroadcastJobTarget<QualifiedName> Nodes(string tableName)
+    public static IBroadcastJobTarget<QualifiedName> Table(string tableName)
     {
         IgniteArgumentCheck.NotNull(tableName);
 

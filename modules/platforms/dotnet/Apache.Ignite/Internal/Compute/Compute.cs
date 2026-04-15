@@ -636,7 +636,7 @@ namespace Apache.Ignite.Internal.Compute
                 cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
-            return GetJobExecution(res.Buffer, readSchema: false, jobDescriptor.ResultMarshaller, cancellationToken);
+            return GetJobExecution(res.Buffer, readSchema: true, jobDescriptor.ResultMarshaller, cancellationToken);
         }
 
         private async Task<IJobExecution<TResult>> SubmitAsync<TArg, TResult>(
