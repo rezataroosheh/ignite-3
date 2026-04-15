@@ -356,7 +356,8 @@ namespace Apache.Ignite.Tests
                         using var resWriter = new PooledArrayBuffer();
 
                         var rw = resWriter.MessageWriter;
-                        if (opCode == ClientOp.ComputeExecuteColocated)
+                        if (opCode == ClientOp.ComputeExecuteColocated
+                                || opCode == ClientOp.ComputeExecutePartitioned)
                         {
                             // Schema version.
                             rw.Write(1);
